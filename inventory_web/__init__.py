@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 from datetime import date, datetime
+from time import perf_counter
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, g, jsonify, render_template, request
 
 from .database import DatabaseError, check_connection
 from .services import find_item_by_barcode, get_inventory_items, get_near_expiry_items
@@ -21,6 +22,17 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config["JSON_AS_ASCII"] = False
 
+    @app.before_request
+    def start_request_timer():
+        g.request_started_at = perf_counter()
+
+    @app.after_request
+    def log_request(response):
+        started_at = getattr(g, "request_started_at", None)
+        elapsed_ms = (perf_counter() - started_at) * 1000 if started_at is not None else 0
+        app.logger.info("%s %s -> %s (%.0f ms)", request.method, request.full_path, response.status_code, elapsed_ms)
+        return response
+
     @app.get("/")
     def index():
         return render_template("index.html")
@@ -30,6 +42,7 @@ def create_app() -> Flask:
         try:
             return jsonify({"ok": True, "database": check_connection()})
         except DatabaseError as error:
+            app.logger.warning("数据库健康检查失败：%s", error)
             return jsonify({"ok": False, "message": str(error)}), 503
 
     @app.get("/api/lookup")
@@ -46,6 +59,7 @@ def create_app() -> Flask:
                 mimetype="application/json",
             )
         except DatabaseError as error:
+            app.logger.warning("库存查询失败：%s", error)
             return jsonify({"ok": False, "message": str(error)}), 503
 
     @app.get("/api/near-expiry")
@@ -66,6 +80,7 @@ def create_app() -> Flask:
                 mimetype="application/json",
             )
         except DatabaseError as error:
+            app.logger.warning("临期库存查询失败：%s", error)
             return jsonify({"ok": False, "message": str(error)}), 503
 
     @app.get("/api/inventory")
@@ -79,6 +94,7 @@ def create_app() -> Flask:
                 mimetype="application/json",
             )
         except DatabaseError as error:
+            app.logger.warning("库存总览查询失败：%s", error)
             return jsonify({"ok": False, "message": str(error)}), 503
 
     return app
