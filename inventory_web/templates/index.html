@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stock Noir · 实时库存盘点</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">INVENTORY CONTROL</p>
+        <h1>Stock <span>Noir</span></h1>
+      </div>
+      <div id="db-status" class="status checking">正在检查数据库</div>
+    </header>
+
+    <section class="hero-card">
+      <div class="scan-icon">⌁</div>
+      <div class="scan-copy">
+        <p class="eyebrow">BARCODE LOOKUP</p>
+        <h2>扫码，即刻掌握库存</h2>
+        <p>扫码枪使用 USB/蓝牙键盘模式时会自动输入条码；默认按回车后立即查询。</p>
+      </div>
+      <form id="lookup-form" class="lookup-form">
+        <label>商品条码
+          <input id="barcode" name="barcode" autocomplete="off" placeholder="扫描或手动输入条码" autofocus>
+        </label>
+        <label>门店编号（可选）
+          <input id="branch" name="branch" autocomplete="off" placeholder="留空则汇总全部门店">
+        </label>
+        <button type="submit">查询库存 <span>↵</span></button>
+      </form>
+    </section>
+
+    <nav class="tabs" aria-label="功能切换">
+      <button class="tab active" data-panel="lookup-panel">扫码查询</button>
+      <button class="tab" data-panel="expiry-panel">临期商品</button>
+    </nav>
+
+    <section id="lookup-panel" class="panel active">
+      <div id="lookup-empty" class="empty-state">等待扫码。将光标置于条码输入框后直接扫描即可。</div>
+      <div id="lookup-result" hidden></div>
+    </section>
+
+    <section id="expiry-panel" class="panel">
+      <div class="expiry-toolbar">
+        <label>未来临期天数 <input id="expiry-days" type="number" min="0" max="3650" value="30"></label>
+        <button id="expiry-button" type="button">加载临期清单</button>
+      </div>
+      <div id="expiry-result" class="empty-state">显示从今天起未来指定天数内到期的批次库存；已过期批次不在本清单中。</div>
+    </section>
+  </main>
+  <template id="item-template">
+    <article class="item-card">
+      <div class="item-head"><div><p class="code"></p><h3></h3><p class="subname"></p></div><div class="quantity"><small>当前库存</small><strong></strong><span>件</span></div></div>
+      <div class="item-meta"></div>
+    </article>
+  </template>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
