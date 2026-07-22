@@ -1,0 +1,11 @@
+services:
+  inventory-web:
+    build:
+      context: .
+    image: inventory-web:latest
+    container_name: inventory-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${WEB_PORT:-5000}:5000"
