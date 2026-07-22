@@ -1,4 +1,6 @@
-FROM python:3.12-slim-bookworm
+# Keep the current supported slim variant rather than pinning a distribution
+# suffix, which may be unavailable in older registry mirrors.
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -12,7 +14,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates gnupg unixodbc \
     && install -d -m 0755 /etc/apt/keyrings \
     && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft-prod.gpg \
-    && curl -fsSL https://packages.microsoft.com/config/debian/12/prod.list \
+    && . /etc/os-release \
+    && curl -fsSL "https://packages.microsoft.com/config/debian/${VERSION_ID}/prod.list" \
        | sed 's#^deb #deb [signed-by=/etc/apt/keyrings/microsoft-prod.gpg] #' > /etc/apt/sources.list.d/microsoft-prod.list \
     && apt-get update \
     && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
