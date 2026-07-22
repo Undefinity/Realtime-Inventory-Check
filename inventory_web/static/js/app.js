@@ -4,7 +4,23 @@ const branchInput = $("#branch");
 
 function number(value) { return Number(value || 0).toLocaleString("zh-CN", {maximumFractionDigits: 4}); }
 function escapeHtml(value) { const node = document.createElement("div"); node.textContent = value ?? ""; return node.innerHTML; }
-function showError(target, message) { target.hidden = false; target.innerHTML = `<div class="error-box">${escapeHtml(message)}</div>`; window.alert(message); }
+function showPopup(message) {
+  let popup = document.querySelector("#error-popup");
+  if (!popup) {
+    popup = document.createElement("div");
+    popup.id = "error-popup";
+    popup.setAttribute("role", "alertdialog");
+    popup.setAttribute("aria-modal", "true");
+    popup.style.cssText = "position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:1rem;background:rgba(15,23,42,.55)";
+    popup.innerHTML = '<section style="width:min(32rem,100%);padding:1.5rem;border-radius:.75rem;background:#fff;box-shadow:0 1rem 3rem rgba(0,0,0,.25)"><h2 style="margin:0 0 .75rem;color:#b42318;font-size:1.2rem">操作失败</h2><p data-error-message style="margin:0;white-space:pre-wrap;word-break:break-word;color:#344054"></p><button type="button" style="margin-top:1.25rem;padding:.55rem 1rem;border:0;border-radius:.4rem;background:#b42318;color:#fff;cursor:pointer">关闭</button></section>';
+    popup.querySelector("button").addEventListener("click", () => popup.remove());
+    document.body.append(popup);
+  }
+  popup.querySelector("[data-error-message]").textContent = message;
+  popup.querySelector("button").focus();
+}
+
+function showError(target, message) { target.hidden = false; target.innerHTML = `<div class="error-box">${escapeHtml(message)}</div>`; showPopup(message); }
 
 async function api(path) { const response = await fetch(path); const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.message || "请求失败"); return data; }
 
@@ -25,6 +41,6 @@ async function lookup(event) { event?.preventDefault(); const barcode = barcodeI
 
 async function loadExpiry() { const days = $("#expiry-days").value || "30"; const params = new URLSearchParams({days}); if (branchInput.value.trim()) params.set("branch", branchInput.value.trim()); const target = $("#expiry-result"); target.className = "empty-state"; target.innerHTML = "正在读取临期批次…"; try { const data = await api(`/api/near-expiry?${params}`); if (!data.rows.length) { target.textContent = `未来 ${data.days} 天内没有临期批次。`; return; } const rows = data.rows.map(row => { const cls = row.days_to_expiry <= 7 ? "badge-warn" : "badge-ok"; const label = row.days_to_expiry === 0 ? "今天到期" : `${row.days_to_expiry} 天后到期`; return `<tr><td>${escapeHtml(row.branch_no)}</td><td>${escapeHtml(row.item_name)}</td><td>${escapeHtml(row.batch_no)}</td><td>${String(row.valid_date).slice(0,10)}</td><td>${number(row.stock_qty)}</td><td><span class="chip ${cls}">${label}</span></td></tr>`; }).join(""); target.innerHTML = `<p class="result-summary">未来 ${data.days} 天内到期：${data.rows.length} 个批次</p><table class="stock-table"><thead><tr><th>门店</th><th>商品</th><th>批号</th><th>有效期</th><th>库存</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table>`; } catch (error) { showError(target, error.message); } }
 
-async function health() { const status = $("#db-status"); try { const data = await api("/api/health"); status.className = "status ok"; status.textContent = `数据库已连接 · ${data.database.name}`; } catch (error) { status.className = "status error"; status.textContent = "数据库未连接"; window.alert(error.message); } }
+async function health() { const status = $("#db-status"); try { const data = await api("/api/health"); status.className = "status ok"; status.textContent = `数据库已连接 · ${data.database.name}`; } catch (error) { status.className = "status error"; status.textContent = "数据库未连接"; showPopup(error.message); } }
 
 $("#lookup-form").addEventListener("submit", lookup); barcodeInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); lookup(event); } }); $("#expiry-button").addEventListener("click", loadExpiry); document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => { document.querySelectorAll(".tab,.panel").forEach(node => node.classList.remove("active")); tab.classList.add("active"); $("#" + tab.dataset.panel).classList.add("active"); })); barcodeInput.focus(); health();
