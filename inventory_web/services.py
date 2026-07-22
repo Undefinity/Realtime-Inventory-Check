@@ -85,3 +85,26 @@ def get_near_expiry_items(branch_no: str | None, days: int, limit: int):
         raise
     except Exception as error:
         raise DatabaseError(f"临期库存查询失败：{error}") from error
+
+
+def get_inventory_items(branch_no: str | None):
+    """返回指定门店或全部门店中实际有库存的商品汇总。"""
+    try:
+        with get_connection() as connection:
+            cursor = connection.cursor()
+            cursor.execute("""
+                SELECT i.item_no, i.item_name, i.item_subname, i.barcode AS master_barcode,
+                       SUM(COALESCE(s.stock_qty, 0)) AS stock_qty,
+                       COUNT(DISTINCT s.branch_no) AS branch_count
+                FROM dbo.ic_t_branch_stock s
+                JOIN dbo.bi_t_item_info i ON i.item_no = s.item_no
+                WHERE ? IS NULL OR s.branch_no = ?
+                GROUP BY i.item_no, i.item_name, i.item_subname, i.barcode
+                HAVING SUM(COALESCE(s.stock_qty, 0)) <> 0
+                ORDER BY i.item_name, i.item_no;
+            """, branch_no, branch_no)
+            return _rows(cursor)
+    except DatabaseError:
+        raise
+    except Exception as error:
+        raise DatabaseError(f"库存总览查询失败：{error}") from error

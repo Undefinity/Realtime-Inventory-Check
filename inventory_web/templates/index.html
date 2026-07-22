@@ -37,6 +37,7 @@
     <nav class="tabs" aria-label="功能切换">
       <button class="tab active" data-panel="lookup-panel">扫码查询</button>
       <button class="tab" data-panel="expiry-panel">临期商品</button>
+      <button class="tab" data-panel="inventory-panel">全部库存</button>
     </nav>
 
     <section id="lookup-panel" class="panel active">
@@ -50,6 +51,14 @@
         <button id="expiry-button" type="button">加载临期清单</button>
       </div>
       <div id="expiry-result" class="empty-state">显示从今天起未来指定天数内到期的批次库存；已过期批次不在本清单中。</div>
+    </section>
+
+    <section id="inventory-panel" class="panel">
+      <div class="expiry-toolbar">
+        <p>显示当前有库存的全部商品；顶部填写门店编号时，仅显示该门店库存。</p>
+        <button id="inventory-button" type="button">加载全部库存</button>
+      </div>
+      <div id="inventory-result" class="empty-state">点击“加载全部库存”查看商品、库存合计与覆盖门店数。</div>
     </section>
   </main>
   <template id="item-template">

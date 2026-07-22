@@ -6,7 +6,7 @@ from datetime import date, datetime
 from flask import Flask, jsonify, render_template, request
 
 from .database import DatabaseError, check_connection
-from .services import find_item_by_barcode, get_near_expiry_items
+from .services import find_item_by_barcode, get_inventory_items, get_near_expiry_items
 
 
 def _json_safe(value):
@@ -62,6 +62,19 @@ def create_app() -> Flask:
                 response=app.json.dumps(
                     {"ok": True, "branch": branch, "days": days, "rows": rows}, default=_json_safe
                 ),
+                status=200,
+                mimetype="application/json",
+            )
+        except DatabaseError as error:
+            return jsonify({"ok": False, "message": str(error)}), 503
+
+    @app.get("/api/inventory")
+    def inventory():
+        branch = request.args.get("branch", "").strip() or None
+        try:
+            rows = get_inventory_items(branch)
+            return app.response_class(
+                response=app.json.dumps({"ok": True, "branch": branch, "rows": rows}, default=_json_safe),
                 status=200,
                 mimetype="application/json",
             )
