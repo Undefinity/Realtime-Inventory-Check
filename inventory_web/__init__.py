@@ -8,6 +8,7 @@ from flask import Flask, g, jsonify, render_template, request
 
 from .database import DatabaseError, check_connection
 from .services import find_item_by_barcode, get_inventory_items, get_near_expiry_items
+from .counting import assign_category, categories, clear_stocktakes, create_category, initialize, save_stocktake, stocktakes
 
 
 def _json_safe(value):
@@ -21,6 +22,7 @@ def _json_safe(value):
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["JSON_AS_ASCII"] = False
+    initialize()
 
     @app.before_request
     def start_request_timer():
@@ -96,5 +98,49 @@ def create_app() -> Flask:
         except DatabaseError as error:
             app.logger.warning("库存总览查询失败：%s", error)
             return jsonify({"ok": False, "message": str(error)}), 503
+
+    @app.get("/api/categories")
+    def get_categories():
+        return jsonify({"ok": True, "rows": categories()})
+
+    @app.post("/api/categories")
+    def add_category():
+        try:
+            return jsonify({"ok": True, "category": create_category((request.get_json(silent=True) or {}).get("name", ""))})
+        except ValueError as error:
+            return jsonify({"ok": False, "message": str(error)}), 400
+
+    @app.post("/api/item-category")
+    def set_item_category():
+        payload = request.get_json(silent=True) or {}
+        try:
+            assign_category(str(payload.get("item_no", "")).strip(), payload.get("category_id"))
+            return jsonify({"ok": True})
+        except ValueError as error:
+            return jsonify({"ok": False, "message": str(error)}), 400
+
+    @app.get("/api/stocktakes")
+    def get_stocktakes():
+        category_id = request.args.get("category_id", type=int)
+        return jsonify({"ok": True, "rows": stocktakes(request.args.get("branch", "").strip() or None, category_id)})
+
+    @app.post("/api/stocktakes")
+    def add_stocktake():
+        payload = request.get_json(silent=True) or {}
+        try:
+            quantity = float(payload.get("counted_qty"))
+            if quantity < 0:
+                raise ValueError("盘点数量不能小于 0。")
+            return jsonify({"ok": True, **save_stocktake(str(payload.get("item_no", "")).strip(), str(payload.get("item_name", "")).strip(), str(payload.get("branch_no", "")).strip(), quantity)})
+        except (TypeError, ValueError) as error:
+            return jsonify({"ok": False, "message": str(error) or "请输入有效的盘点数量。"}), 400
+
+    @app.post("/api/stocktakes/clear")
+    def clear_stocktake():
+        try:
+            count = clear_stocktakes((request.get_json(silent=True) or {}).get("branch_no", "").strip())
+            return jsonify({"ok": True, "deleted": count})
+        except ValueError as error:
+            return jsonify({"ok": False, "message": str(error)}), 400
 
     return app

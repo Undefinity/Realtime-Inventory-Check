@@ -15,6 +15,7 @@
       </a>
       <nav class="side-nav" aria-label="功能导航">
         <button class="nav-item active" data-panel="lookup-panel"><span>⌕</span>商品查询</button>
+        <button class="nav-item" data-panel="stocktake-panel"><span>✓</span>盘点列表</button>
         <button class="nav-item" data-panel="expiry-panel"><span>◷</span>临期商品</button>
         <button class="nav-item" data-panel="inventory-panel"><span>▤</span>库存总览</button>
       </nav>
@@ -61,6 +62,11 @@
         <div id="expiry-result" class="empty-state"><span>◷</span><strong>尚未查询</strong><p>设置临期天数后，查看对应时间范围内即将到期的商品。</p></div>
       </section>
 
+      <section id="stocktake-panel" class="panel">
+        <div class="tool-card"><div><h2>盘点列表</h2><p>刚完成盘点的商品排在最前；红色标记表示其他门店也已盘点。</p></div><div class="toolbar-actions"><label>商品分类<select id="category-filter"><option value="">全部分类</option></select></label><button id="add-category-button" type="button">新建分类</button><button id="clear-stocktake-button" class="danger-button" type="button">一键清空</button></div></div>
+        <div id="stocktake-result" class="empty-state"><span>✓</span><strong>暂无盘点记录</strong><p>完成商品盘点后，记录会显示在这里。</p></div>
+      </section>
+
       <section id="inventory-panel" class="panel">
         <div class="tool-card">
           <div><h2>库存总览</h2><p>查看当前有库存的全部商品；填写门店编号后可按门店筛选。</p></div>
@@ -70,6 +76,7 @@
       </section>
     </main>
   </div>
+  <div id="count-modal" class="modal" hidden><div class="modal-card"><button class="modal-close" type="button" aria-label="关闭">×</button><h2>录入盘点数量</h2><p id="count-item-name"></p><label>盘点门店<input id="count-branch" autocomplete="off" placeholder="请输入盘点门店编号"></label><label>实际数量<input id="count-quantity" type="number" min="0" step="any" placeholder="请输入实际盘点数量"></label><label>商品分类<select id="count-category"><option value="">未分类</option></select></label><button id="save-count-button" type="button">保存盘点记录</button></div></div>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
