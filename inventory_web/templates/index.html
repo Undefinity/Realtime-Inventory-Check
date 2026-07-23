@@ -3,70 +3,73 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stock Noir · 实时库存盘点</title>
+  <title>实时库存盘点系统</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
-  <main class="shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">INVENTORY CONTROL</p>
-        <h1>Stock <span>Noir</span></h1>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="实时库存盘点系统首页">
+        <span class="brand-mark">库</span>
+        <span>实时库存盘点系统<small>库存管理平台</small></span>
+      </a>
+      <nav class="side-nav" aria-label="功能导航">
+        <button class="nav-item active" data-panel="lookup-panel"><span>⌕</span>商品查询</button>
+        <button class="nav-item" data-panel="expiry-panel"><span>◷</span>临期商品</button>
+        <button class="nav-item" data-panel="inventory-panel"><span>▤</span>库存总览</button>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="status-dot"></span><span id="db-status">正在连接数据服务</span>
       </div>
-      <div id="db-status" class="status checking">正在检查数据库</div>
-    </header>
+    </aside>
 
-    <section class="hero-card">
-      <div class="scan-icon">⌁</div>
-      <div class="scan-copy">
-        <p class="eyebrow">BARCODE LOOKUP</p>
-        <h2>扫码，即刻掌握库存</h2>
-        <p>扫码枪使用 USB/蓝牙键盘模式时会自动输入条码；默认按回车后立即查询。</p>
-      </div>
-      <form id="lookup-form" class="lookup-form">
-        <label>商品条码
-          <input id="barcode" name="barcode" autocomplete="off" placeholder="扫描或手动输入条码" autofocus>
-        </label>
-        <label>门店编号（可选）
-          <input id="branch" name="branch" autocomplete="off" placeholder="留空则汇总全部门店">
-        </label>
-        <button type="submit">查询库存 <span>↵</span></button>
-      </form>
-    </section>
+    <main class="main-content">
+      <header class="page-header">
+        <div>
+          <p class="page-kicker">库存管理</p>
+          <h1 id="page-title">商品查询</h1>
+          <p id="page-description">扫描条码或输入商品信息，快速查看库存情况。</p>
+        </div>
+        <div class="today" id="today"></div>
+      </header>
 
-    <nav class="tabs" aria-label="功能切换">
-      <button class="tab active" data-panel="lookup-panel">扫码查询</button>
-      <button class="tab" data-panel="expiry-panel">临期商品</button>
-      <button class="tab" data-panel="inventory-panel">全部库存</button>
-    </nav>
+      <section id="lookup-panel" class="panel active">
+        <div class="search-card">
+          <div class="search-heading">
+            <span class="heading-icon">⌕</span>
+            <div><h2>查询商品库存</h2><p>扫描枪可直接输入条码，扫描完成后自动查询。</p></div>
+          </div>
+          <form id="lookup-form" class="lookup-form">
+            <label>商品条码
+              <input id="barcode" name="barcode" autocomplete="off" placeholder="请扫描或输入商品条码" autofocus>
+            </label>
+            <label>门店编号 <em>选填</em>
+              <input id="branch" name="branch" autocomplete="off" placeholder="不填则查询所有门店">
+            </label>
+            <button type="submit">查询库存</button>
+          </form>
+        </div>
+        <div id="lookup-empty" class="empty-state"><span>▧</span><strong>等待查询</strong><p>请扫描商品条码，或手动输入条码后点击“查询库存”。</p></div>
+        <div id="lookup-result" hidden></div>
+      </section>
 
-    <section id="lookup-panel" class="panel active">
-      <div id="lookup-empty" class="empty-state">等待扫码。将光标置于条码输入框后直接扫描即可。</div>
-      <div id="lookup-result" hidden></div>
-    </section>
+      <section id="expiry-panel" class="panel">
+        <div class="tool-card">
+          <div><h2>临期商品清单</h2><p>查看即将到期的商品批次，便于及时处理。</p></div>
+          <div class="toolbar-actions"><label>临期天数<input id="expiry-days" type="number" min="0" max="3650" value="30"></label><button id="expiry-button" type="button">查询临期商品</button></div>
+        </div>
+        <div id="expiry-result" class="empty-state"><span>◷</span><strong>尚未查询</strong><p>设置临期天数后，查看对应时间范围内即将到期的商品。</p></div>
+      </section>
 
-    <section id="expiry-panel" class="panel">
-      <div class="expiry-toolbar">
-        <label>未来临期天数 <input id="expiry-days" type="number" min="0" max="3650" value="30"></label>
-        <button id="expiry-button" type="button">加载临期清单</button>
-      </div>
-      <div id="expiry-result" class="empty-state">显示从今天起未来指定天数内到期的批次库存；已过期批次不在本清单中。</div>
-    </section>
-
-    <section id="inventory-panel" class="panel">
-      <div class="expiry-toolbar">
-        <p>显示当前有库存的全部商品；顶部填写门店编号时，仅显示该门店库存。</p>
-        <button id="inventory-button" type="button">加载全部库存</button>
-      </div>
-      <div id="inventory-result" class="empty-state">点击“加载全部库存”查看商品、库存合计与覆盖门店数。</div>
-    </section>
-  </main>
-  <template id="item-template">
-    <article class="item-card">
-      <div class="item-head"><div><p class="code"></p><h3></h3><p class="subname"></p></div><div class="quantity"><small>当前库存</small><strong></strong><span>件</span></div></div>
-      <div class="item-meta"></div>
-    </article>
-  </template>
+      <section id="inventory-panel" class="panel">
+        <div class="tool-card">
+          <div><h2>库存总览</h2><p>查看当前有库存的全部商品；填写门店编号后可按门店筛选。</p></div>
+          <button id="inventory-button" type="button">查看全部库存</button>
+        </div>
+        <div id="inventory-result" class="empty-state"><span>▤</span><strong>尚未查询</strong><p>点击“查看全部库存”，获取当前商品库存汇总。</p></div>
+      </section>
+    </main>
+  </div>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

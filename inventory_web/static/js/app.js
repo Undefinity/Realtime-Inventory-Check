@@ -1,48 +1,32 @@
 const $ = (selector) => document.querySelector(selector);
 const barcodeInput = $("#barcode");
 const branchInput = $("#branch");
+const panelInfo = {
+  "lookup-panel": ["商品查询", "扫描条码或输入商品信息，快速查看库存情况。"],
+  "expiry-panel": ["临期商品", "及时查看即将到期的商品批次。"],
+  "inventory-panel": ["库存总览", "查看当前商品库存汇总情况。"],
+};
 
-function number(value) { return Number(value || 0).toLocaleString("zh-CN", {maximumFractionDigits: 4}); }
+function number(value) { return Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 4 }); }
 function escapeHtml(value) { const node = document.createElement("div"); node.textContent = value ?? ""; return node.innerHTML; }
-function showPopup(message) {
-  let popup = document.querySelector("#error-popup");
-  if (!popup) {
-    popup = document.createElement("div");
-    popup.id = "error-popup";
-    popup.setAttribute("role", "alertdialog");
-    popup.setAttribute("aria-modal", "true");
-    popup.style.cssText = "position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:1rem;background:rgba(15,23,42,.55)";
-    popup.innerHTML = '<section style="width:min(32rem,100%);padding:1.5rem;border-radius:.75rem;background:#fff;box-shadow:0 1rem 3rem rgba(0,0,0,.25)"><h2 style="margin:0 0 .75rem;color:#b42318;font-size:1.2rem">操作失败</h2><p data-error-message style="margin:0;white-space:pre-wrap;word-break:break-word;color:#344054"></p><button type="button" style="margin-top:1.25rem;padding:.55rem 1rem;border:0;border-radius:.4rem;background:#b42318;color:#fff;cursor:pointer">关闭</button></section>';
-    popup.querySelector("button").addEventListener("click", () => popup.remove());
-    document.body.append(popup);
-  }
-  popup.querySelector("[data-error-message]").textContent = message;
-  popup.querySelector("button").focus();
-}
-
-function showError(target, message) { target.hidden = false; target.innerHTML = `<div class="error-box">${escapeHtml(message)}</div>`; showPopup(message); }
-
-async function api(path) { const response = await fetch(path); const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.message || "请求失败"); return data; }
+function setLoading(target, text) { target.hidden = false; target.className = "empty-state"; target.innerHTML = `<span>◌</span><strong>${text}</strong>`; }
+function showError(target, message) { target.hidden = false; target.innerHTML = `<div class="error-box">${escapeHtml(message || "请求失败，请稍后重试。")}</div>`; }
+async function api(path) { const response = await fetch(path); const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.message || "请求失败，请稍后重试。"); return data; }
 
 function renderLookup(data) {
-  const container = $("#lookup-result"); const empty = $("#lookup-empty"); empty.hidden = true; container.hidden = false;
-  if (!data.found) { container.innerHTML = `<div class="empty-state">${escapeHtml(data.message)}</div>`; return; }
+  const container = $("#lookup-result"); $("#lookup-empty").hidden = true; container.hidden = false;
+  if (!data.found) { container.innerHTML = `<div class="empty-state"><span>⌕</span><strong>未找到商品</strong><p>${escapeHtml(data.message || "请确认商品条码是否正确。")}</p></div>`; return; }
   const item = data.items[0];
-  const chips = [
-    `商品编码：${item.item_no}`, `主条码：${item.master_barcode || "未维护"}`, `覆盖门店：${item.branch_count}`,
-    item.valid_day != null ? `保质期规则：${item.valid_day}` : "未维护保质期规则",
-    item.tip_day1 != null ? `提示阈值 1：${item.tip_day1} 天` : ""
-  ].filter(Boolean).map(text => `<span class="chip">${escapeHtml(text)}</span>`).join("");
-  const stockRows = data.stock_by_branch.map(row => `<tr><td>${escapeHtml(row.branch_no)}</td><td>${escapeHtml(row.item_no)}</td><td>${number(row.stock_qty)}</td></tr>`).join("");
-  container.innerHTML = `<article class="item-card"><div class="item-head"><div><p class="code">${escapeHtml(item.item_no)}</p><h3>${escapeHtml(item.item_name)}</h3><p class="subname">${escapeHtml(item.item_subname || "")}</p></div><div class="quantity"><small>${data.branch ? "本门店库存" : "全部门店库存"}</small><strong>${number(item.stock_qty)}</strong><span>件</span></div></div><div class="item-meta">${chips}</div>${stockRows ? `<table class="stock-table"><thead><tr><th>门店</th><th>商品编码</th><th>库存数量</th></tr></thead><tbody>${stockRows}</tbody></table>` : "<p class='subname'>未查询到库存明细。</p>"}</article>`;
+  const chips = [`商品编码：${item.item_no}`, `主条码：${item.master_barcode || "未维护"}`, `覆盖门店：${item.branch_count}`, item.valid_day != null ? `保质期：${item.valid_day} 天` : "未维护保质期", item.tip_day1 != null ? `预警天数：${item.tip_day1} 天` : ""].filter(Boolean).map(text => `<span class="chip">${escapeHtml(text)}</span>`).join("");
+  const rows = data.stock_by_branch.map(row => `<tr><td>${escapeHtml(row.branch_no)}</td><td>${escapeHtml(row.item_no)}</td><td>${number(row.stock_qty)}</td></tr>`).join("");
+  container.innerHTML = `<article class="item-card"><div class="item-head"><div><p class="code">${escapeHtml(item.item_no)}</p><h3>${escapeHtml(item.item_name)}</h3><p class="subname">${escapeHtml(item.item_subname || "")}</p></div><div class="quantity"><small>${data.branch ? "本门店库存" : "全部门店库存"}</small><strong>${number(item.stock_qty)}</strong><span>件</span></div></div><div class="item-meta">${chips}</div>${rows ? `<table class="stock-table"><thead><tr><th>门店编号</th><th>商品编码</th><th>库存数量</th></tr></thead><tbody>${rows}</tbody></table>` : "<p class='subname'>暂无库存明细。</p>"}</article>`;
 }
 
-async function lookup(event) { event?.preventDefault(); const barcode = barcodeInput.value.trim(); if (!barcode) { barcodeInput.focus(); return; } const params = new URLSearchParams({barcode}); if (branchInput.value.trim()) params.set("branch", branchInput.value.trim()); const target = $("#lookup-result"); target.hidden = false; target.innerHTML = "<div class='empty-state'>正在查询商品与库存…</div>"; try { renderLookup(await api(`/api/lookup?${params}`)); } catch (error) { showError(target, error.message); } finally { barcodeInput.select(); barcodeInput.focus(); } }
+async function lookup(event) { event?.preventDefault(); const barcode = barcodeInput.value.trim(); if (!barcode) { barcodeInput.focus(); return; } const params = new URLSearchParams({ barcode }); if (branchInput.value.trim()) params.set("branch", branchInput.value.trim()); const target = $("#lookup-result"); setLoading(target, "正在查询商品库存"); try { renderLookup(await api(`/api/lookup?${params}`)); } catch (error) { showError(target, error.message); } finally { barcodeInput.select(); barcodeInput.focus(); } }
+async function loadExpiry() { const params = new URLSearchParams({ days: $("#expiry-days").value || "30" }); if (branchInput.value.trim()) params.set("branch", branchInput.value.trim()); const target = $("#expiry-result"); setLoading(target, "正在读取临期商品"); try { const data = await api(`/api/near-expiry?${params}`); if (!data.rows.length) { target.innerHTML = "<span>✓</span><strong>没有临期商品</strong><p>在所选时间范围内，没有即将到期的商品。</p>"; return; } const rows = data.rows.map(row => { const cls = row.days_to_expiry <= 7 ? "badge-warn" : "badge-ok"; const label = row.days_to_expiry === 0 ? "今天到期" : `${row.days_to_expiry} 天后到期`; return `<tr><td>${escapeHtml(row.branch_no)}</td><td>${escapeHtml(row.item_name)}</td><td>${escapeHtml(row.batch_no)}</td><td>${String(row.valid_date).slice(0,10)}</td><td>${number(row.stock_qty)}</td><td><span class="chip ${cls}">${label}</span></td></tr>`; }).join(""); target.className = ""; target.innerHTML = `<p class="result-summary">未来 ${data.days} 天内，共有 ${data.rows.length} 个临期商品批次</p><table class="stock-table"><thead><tr><th>门店编号</th><th>商品名称</th><th>批号</th><th>有效期</th><th>库存数量</th><th>到期情况</th></tr></thead><tbody>${rows}</tbody></table>`; } catch (error) { showError(target, error.message); } }
+async function loadInventory() { const params = new URLSearchParams(); if (branchInput.value.trim()) params.set("branch", branchInput.value.trim()); const target = $("#inventory-result"); setLoading(target, "正在读取库存数据"); try { const data = await api(`/api/inventory?${params}`); if (!data.rows.length) { target.innerHTML = "<span>▧</span><strong>暂无库存商品</strong><p>当前筛选范围内没有库存记录。</p>"; return; } const rows = data.rows.map(row => `<tr><td>${escapeHtml(row.item_no)}</td><td>${escapeHtml(row.item_name)}</td><td>${escapeHtml(row.item_subname || "-")}</td><td>${escapeHtml(row.master_barcode || "-")}</td><td>${number(row.stock_qty)}</td><td>${number(row.branch_count)}</td></tr>`).join(""); target.className = ""; target.innerHTML = `<p class="result-summary">当前共有 ${data.rows.length} 个有库存商品${data.branch ? `，门店：${escapeHtml(data.branch)}` : ""}</p><table class="stock-table"><thead><tr><th>商品编码</th><th>商品名称</th><th>商品别名</th><th>主条码</th><th>库存合计</th><th>覆盖门店</th></tr></thead><tbody>${rows}</tbody></table>`; } catch (error) { showError(target, error.message); } }
+async function health() { const status = $("#db-status"); const footer = status.parentElement; try { const data = await api("/api/health"); footer.className = "sidebar-footer ok"; status.textContent = `数据服务已连接 · ${data.database.name}`; } catch (error) { footer.className = "sidebar-footer error"; status.textContent = "数据服务未连接"; } }
 
-async function loadExpiry() { const days = $("#expiry-days").value || "30"; const params = new URLSearchParams({days}); if (branchInput.value.trim()) params.set("branch", branchInput.value.trim()); const target = $("#expiry-result"); target.className = "empty-state"; target.innerHTML = "正在读取临期批次…"; try { const data = await api(`/api/near-expiry?${params}`); if (!data.rows.length) { target.textContent = `未来 ${data.days} 天内没有临期批次。`; return; } const rows = data.rows.map(row => { const cls = row.days_to_expiry <= 7 ? "badge-warn" : "badge-ok"; const label = row.days_to_expiry === 0 ? "今天到期" : `${row.days_to_expiry} 天后到期`; return `<tr><td>${escapeHtml(row.branch_no)}</td><td>${escapeHtml(row.item_name)}</td><td>${escapeHtml(row.batch_no)}</td><td>${String(row.valid_date).slice(0,10)}</td><td>${number(row.stock_qty)}</td><td><span class="chip ${cls}">${label}</span></td></tr>`; }).join(""); target.innerHTML = `<p class="result-summary">未来 ${data.days} 天内到期：${data.rows.length} 个批次</p><table class="stock-table"><thead><tr><th>门店</th><th>商品</th><th>批号</th><th>有效期</th><th>库存</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table>`; } catch (error) { showError(target, error.message); } }
-
-async function loadInventory() { const params = new URLSearchParams(); if (branchInput.value.trim()) params.set("branch", branchInput.value.trim()); const target = $("#inventory-result"); target.className = "empty-state"; target.innerHTML = "正在加载全部库存…"; try { const data = await api(`/api/inventory?${params}`); if (!data.rows.length) { target.textContent = "没有查询到有库存的商品。"; return; } const rows = data.rows.map(row => `<tr><td>${escapeHtml(row.item_no)}</td><td>${escapeHtml(row.item_name)}</td><td>${escapeHtml(row.item_subname || "")}</td><td>${escapeHtml(row.master_barcode || "")}</td><td>${number(row.stock_qty)}</td><td>${number(row.branch_count)}</td></tr>`).join(""); target.innerHTML = `<p class="result-summary">共 ${data.rows.length} 个有库存商品${data.branch ? ` · 门店 ${escapeHtml(data.branch)}` : ""}</p><table class="stock-table"><thead><tr><th>商品编码</th><th>商品名称</th><th>副名称</th><th>主条码</th><th>库存合计</th><th>覆盖门店</th></tr></thead><tbody>${rows}</tbody></table>`; } catch (error) { showError(target, error.message); } }
-
-async function health() { const status = $("#db-status"); try { const data = await api("/api/health"); status.className = "status ok"; status.textContent = `数据库已连接 · ${data.database.name}`; } catch (error) { status.className = "status error"; status.textContent = "数据库未连接"; showPopup(error.message); } }
-
-$("#lookup-form").addEventListener("submit", lookup); barcodeInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); lookup(event); } }); $("#expiry-button").addEventListener("click", loadExpiry); $("#inventory-button").addEventListener("click", loadInventory); document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => { document.querySelectorAll(".tab,.panel").forEach(node => node.classList.remove("active")); tab.classList.add("active"); $("#" + tab.dataset.panel).classList.add("active"); })); barcodeInput.focus(); health();
+$("#lookup-form").addEventListener("submit", lookup); $("#expiry-button").addEventListener("click", loadExpiry); $("#inventory-button").addEventListener("click", loadInventory);
+document.querySelectorAll(".nav-item").forEach(tab => tab.addEventListener("click", () => { document.querySelectorAll(".nav-item,.panel").forEach(node => node.classList.remove("active")); tab.classList.add("active"); const panel = $("#" + tab.dataset.panel); panel.classList.add("active"); const [title, description] = panelInfo[tab.dataset.panel]; $("#page-title").textContent = title; $("#page-description").textContent = description; if (tab.dataset.panel === "lookup-panel") barcodeInput.focus(); }));
+$("#today").textContent = new Intl.DateTimeFormat("zh-CN", { year:"numeric", month:"long", day:"numeric", weekday:"short" }).format(new Date()); barcodeInput.focus(); health();
