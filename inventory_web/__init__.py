@@ -4,11 +4,19 @@ from decimal import Decimal
 from datetime import date, datetime
 from time import perf_counter
 
-from flask import Flask, g, jsonify, render_template, request
+import os
+import secrets
+from hmac import compare_digest
+from datetime import timedelta
+from functools import wraps
+from pathlib import Path
+
+from flask import Flask, flash, g, jsonify, redirect, render_template, request, session, url_for
 
 from .database import DatabaseError, check_connection
 from .services import find_item_by_barcode, get_inventory_items, get_near_expiry_items
 from .counting import assign_category, categories, clear_stocktakes, create_category, initialize, save_stocktake, stocktakes
+from .auth import authenticate, create_user, initialize_users, list_users, update_user
 
 
 def _json_safe(value):
@@ -22,11 +30,46 @@ def _json_safe(value):
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["JSON_AS_ASCII"] = False
+    app.config.update(
+        SECRET_KEY=_session_secret(),
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true",
+    )
     initialize()
+    initialize_users()
+
+    @app.context_processor
+    def inject_csrf_token():
+        token = session.get("csrf_token")
+        if not token:
+            token = secrets.token_urlsafe(24)
+            session["csrf_token"] = token
+        return {"csrf_token": token}
+
+    def csrf_valid() -> bool:
+        return compare_digest(session.get("csrf_token", ""), request.form.get("csrf_token", ""))
+
+    def admin_required(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if session.get("role") != "admin":
+                flash("仅管理员可以访问用户管理。", "error")
+                return redirect(url_for("index"))
+            return view(*args, **kwargs)
+        return wrapped
 
     @app.before_request
     def start_request_timer():
         g.request_started_at = perf_counter()
+        if request.endpoint in {"login", "static"}:
+            return None
+        if not session.get("user_id"):
+            if request.path.startswith("/api/"):
+                return jsonify({"ok": False, "message": "登录已失效，请重新登录。"}), 401
+            return redirect(url_for("login", next=request.full_path))
+        return None
 
     @app.after_request
     def log_request(response):
@@ -38,6 +81,53 @@ def create_app() -> Flask:
     @app.get("/")
     def index():
         return render_template("index.html")
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if session.get("user_id"):
+            return redirect(url_for("index"))
+        error = None
+        if request.method == "POST":
+            if not csrf_valid():
+                error = "页面已过期，请刷新后重试。"
+                return render_template("login.html", error=error), 400
+            user = authenticate(request.form.get("username", ""), request.form.get("password", ""))
+            if user:
+                session.clear()
+                session.permanent = True
+                session.update({"user_id": user["id"], "username": user["username"], "role": user["role"]})
+                target = request.args.get("next", "")
+                return redirect(target if target.startswith("/") and not target.startswith("//") else url_for("index"))
+            error = "用户名或密码错误。"
+        return render_template("login.html", error=error)
+
+    @app.post("/logout")
+    def logout():
+        if not csrf_valid():
+            return "页面已过期，请刷新后重试。", 400
+        session.clear()
+        return redirect(url_for("login"))
+
+    @app.route("/admin/users", methods=["GET", "POST"])
+    @admin_required
+    def manage_users():
+        if request.method == "POST":
+            try:
+                if not csrf_valid():
+                    raise ValueError("页面已过期，请刷新后重试。")
+                action = request.form.get("action")
+                if action == "create":
+                    create_user(request.form.get("username", ""), request.form.get("password", ""), request.form.get("role", "user"))
+                    flash("用户已创建。", "success")
+                elif action == "update":
+                    update_user(int(request.form["user_id"]), request.form.get("username", ""), request.form.get("password", ""), request.form.get("role", "user"), session["user_id"])
+                    flash("用户信息已更新。", "success")
+                else:
+                    raise ValueError("不支持的操作。")
+            except (KeyError, ValueError) as error:
+                flash(str(error), "error")
+            return redirect(url_for("manage_users"))
+        return render_template("users.html", users=list_users())
 
     @app.get("/api/health")
     def health():
@@ -144,3 +234,17 @@ def create_app() -> Flask:
             return jsonify({"ok": False, "message": str(error)}), 400
 
     return app
+
+
+def _session_secret() -> str:
+    """Use an env-provided secret, or retain a generated local secret across restarts."""
+    configured = os.getenv("FLASK_SECRET_KEY")
+    if configured:
+        return configured
+    secret_path = Path(__file__).resolve().parents[1] / "data" / ".session_secret"
+    if secret_path.exists():
+        return secret_path.read_text(encoding="utf-8").strip()
+    secret_path.parent.mkdir(exist_ok=True)
+    secret = secrets.token_urlsafe(32)
+    secret_path.write_text(secret, encoding="utf-8")
+    return secret

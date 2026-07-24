@@ -18,7 +18,11 @@
         <button class="nav-item" data-panel="stocktake-panel"><span>✓</span>盘点列表</button>
         <button class="nav-item" data-panel="expiry-panel"><span>◷</span>临期商品</button>
         <button class="nav-item" data-panel="inventory-panel"><span>▤</span>库存总览</button>
+        {% if session.get('role') == 'admin' %}
+        <a class="nav-item admin-nav" href="{{ url_for('manage_users') }}"><span>⚙</span>用户管理</a>
+        {% endif %}
       </nav>
+      <div class="current-user"><span>当前用户：{{ session.get('username') }}</span><span class="role-badge">{{ '管理员' if session.get('role') == 'admin' else '用户' }}</span><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">退出登录</button></form></div>
       <div class="sidebar-footer">
         <span class="status-dot"></span><span id="db-status">正在连接数据服务</span>
       </div>

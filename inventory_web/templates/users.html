@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用户管理 - 实时库存盘点系统</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="admin-page">
+  <main class="admin-content">
+    <header class="admin-header"><div><p class="page-kicker">系统管理</p><h1>用户管理</h1><p>管理员可查看、创建和修改所有账户。</p></div><a class="back-link" href="{{ url_for('index') }}">返回主页</a></header>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+    <section class="admin-card"><h2>新建用户</h2><form method="post" class="user-create-form"><input type="hidden" name="action" value="create"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>用户名<input name="username" required minlength="3" maxlength="50"></label><label>初始密码<input name="password" type="password" required minlength="6"></label><label>用户类型<select name="role"><option value="user">用户</option><option value="admin">管理员</option></select></label><button type="submit">创建用户</button></form></section>
+    <section class="admin-card"><h2>已有用户</h2><div class="user-list">{% for user in users %}<form method="post" class="user-row"><input type="hidden" name="action" value="update"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="user_id" value="{{ user.id }}"><label>用户名<input name="username" value="{{ user.username }}" required minlength="3" maxlength="50"></label><label>新密码 <small>留空则不修改</small><input name="password" type="password" minlength="6" autocomplete="new-password"></label><label>用户类型<select name="role"><option value="user" {% if user.role == 'user' %}selected{% endif %}>用户</option><option value="admin" {% if user.role == 'admin' %}selected{% endif %}>管理员</option></select></label><div class="user-action"><span>创建于 {{ user.created_at.replace('T', ' ') }}</span><button type="submit">保存修改</button></div></form>{% endfor %}</div></section>
+  </main>
+</body>
+</html>
