@@ -14,18 +14,15 @@
         <span>实时库存盘点系统<small>库存管理平台</small></span>
       </a>
       <nav class="side-nav" aria-label="功能导航">
-        <button class="nav-item active" data-panel="lookup-panel"><span>⌕</span>商品查询</button>
+        <button class="nav-item active" data-panel="query-panel"><span>⌕</span>商品查询</button>
+        <button class="nav-item" data-panel="inventory-panel"><span>▤</span>库存</button>
         <button class="nav-item" data-panel="stocktake-panel"><span>✓</span>盘点列表</button>
-        <button class="nav-item" data-panel="expiry-panel"><span>◷</span>临期商品</button>
-        <button class="nav-item" data-panel="inventory-panel"><span>▤</span>库存总览</button>
         {% if session.get('role') == 'admin' %}
         <a class="nav-item admin-nav" href="{{ url_for('manage_users') }}"><span>⚙</span>用户管理</a>
         {% endif %}
       </nav>
-      <div class="current-user"><span>当前用户：{{ session.get('username') }}</span><span class="role-badge">{{ '管理员' if session.get('role') == 'admin' else '用户' }}</span><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">退出登录</button></form></div>
-      <div class="sidebar-footer">
-        <span class="status-dot"></span><span id="db-status">正在连接数据服务</span>
-      </div>
+      <div class="current-user"><span>当前门店：{{ session.get('username') }}</span><span class="role-badge">{{ '管理员' if session.get('role') == 'admin' else ('旗舰店' if session.get('username') == '旗舰店' else '分店') }}</span><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">退出登录</button></form></div>
+      <div class="sidebar-footer ok"><span class="status-dot"></span><span>本地库存数据</span></div>
     </aside>
 
     <main class="main-content">
@@ -33,54 +30,42 @@
         <div>
           <p class="page-kicker">库存管理</p>
           <h1 id="page-title">商品查询</h1>
-          <p id="page-description">扫描条码或输入商品信息，快速查看库存情况。</p>
+          <p id="page-description">按商品编码或商品名称查询本地库存资料。</p>
         </div>
         <div class="today" id="today"></div>
       </header>
 
-      <section id="lookup-panel" class="panel active">
+      <section id="query-panel" class="panel active">
         <div class="search-card">
           <div class="search-heading">
             <span class="heading-icon">⌕</span>
-            <div><h2>查询商品库存</h2><p>扫描枪可直接输入条码，扫描完成后自动查询。</p></div>
+            <div><h2>查询本地商品</h2><p>输入商品编码或商品名称的任意部分，即可显示全部匹配结果。</p></div>
           </div>
-          <form id="lookup-form" class="lookup-form">
-            <label>商品条码
-              <input id="barcode" name="barcode" autocomplete="off" placeholder="请扫描或输入商品条码" autofocus>
+          <form id="inventory-search-form" class="search-form">
+            <label>商品编码或名称
+              <input id="inventory-search-input" name="q" autocomplete="off" placeholder="例如：0000000000001、花生或 Gotchard" autofocus>
             </label>
-            <label>门店编号 <em>选填</em>
-              <input id="branch" name="branch" autocomplete="off" placeholder="不填则查询所有门店">
-            </label>
-            <button type="submit">查询库存</button>
+            <button type="submit">查询</button>
           </form>
         </div>
-        <div id="lookup-empty" class="empty-state"><span>▧</span><strong>等待查询</strong><p>请扫描商品条码，或手动输入条码后点击“查询库存”。</p></div>
-        <div id="lookup-result" hidden></div>
-      </section>
-
-      <section id="expiry-panel" class="panel">
-        <div class="tool-card">
-          <div><h2>临期商品清单</h2><p>查看即将到期的商品批次，便于及时处理。</p></div>
-          <div class="toolbar-actions"><label>临期天数<input id="expiry-days" type="number" min="0" max="3650" value="30"></label><button id="expiry-button" type="button">查询临期商品</button></div>
-        </div>
-        <div id="expiry-result" class="empty-state"><span>◷</span><strong>尚未查询</strong><p>设置临期天数后，查看对应时间范围内即将到期的商品。</p></div>
+        <div id="inventory-search-result" class="empty-state"><span>⌕</span><strong>等待查询</strong><p>请输入商品编码或名称后点击“查询”。</p></div>
       </section>
 
       <section id="stocktake-panel" class="panel">
-        <div class="tool-card"><div><h2>盘点列表</h2><p>刚完成盘点的商品排在最前；红色标记表示其他门店也已盘点。</p></div><div class="toolbar-actions"><label>商品分类<select id="category-filter"><option value="">全部分类</option></select></label><button id="add-category-button" type="button">新建分类</button><button id="clear-stocktake-button" class="danger-button" type="button">一键清空</button></div></div>
+        <div class="tool-card"><div><h2>盘点列表</h2><p>当前账号即当前门店；盘点记录自动归属到该账号。</p></div><div class="toolbar-actions"><label>商品分类<select id="category-filter"><option value="">全部分类</option></select></label>{% if category_manager %}<button id="add-category-button" type="button">新建分类</button><button id="rename-category-button" type="button">重命名分类</button><button id="delete-category-button" class="danger-button" type="button">删除分类</button>{% endif %}<button id="clear-stocktake-button" class="danger-button" type="button">清空本店盘点</button></div></div>
         <div id="stocktake-result" class="empty-state"><span>✓</span><strong>暂无盘点记录</strong><p>完成商品盘点后，记录会显示在这里。</p></div>
       </section>
 
       <section id="inventory-panel" class="panel">
         <div class="tool-card">
-          <div><h2>库存总览</h2><p>查看当前有库存的全部商品；填写门店编号后可按门店筛选。</p></div>
-          <button id="inventory-button" type="button">查看全部库存</button>
+          <div><h2>本地库存</h2><p>仅显示本地 SQLite“库存”表中的数据。点击“同步并保存”时才会连接外部数据库，并完整更新本地数据。</p></div>
+          <button id="inventory-sync-button" type="button">同步并保存</button>
         </div>
-        <div id="inventory-result" class="empty-state"><span>▤</span><strong>尚未查询</strong><p>点击“查看全部库存”，获取当前商品库存汇总。</p></div>
+        <div id="inventory-result" class="empty-state"><span>▤</span><strong>正在读取本地库存</strong><p>本页面不会自动连接外部数据库。</p></div>
       </section>
     </main>
   </div>
-  <div id="count-modal" class="modal" hidden><div class="modal-card"><button class="modal-close" type="button" aria-label="关闭">×</button><h2>录入盘点数量</h2><p id="count-item-name"></p><label>盘点门店<input id="count-branch" autocomplete="off" placeholder="请输入盘点门店编号"></label><label>实际数量<input id="count-quantity" type="number" min="0" step="any" placeholder="请输入实际盘点数量"></label><label>商品分类<select id="count-category"><option value="">未分类</option></select></label><button id="save-count-button" type="button">保存盘点记录</button></div></div>
+  <div id="count-modal" class="modal" hidden><div class="modal-card"><button class="modal-close" type="button" aria-label="关闭">×</button><h2>录入盘点数量</h2><p id="count-item-name"></p><label>实际数量<input id="count-quantity" type="number" min="0" step="any" placeholder="请输入实际盘点数量"></label><label>商品分类<select id="count-category"><option value="">未分类</option></select></label><button id="save-count-button" type="button">保存盘点记录</button></div></div>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

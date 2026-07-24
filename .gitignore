@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 data/.session_secret
+server.log
+server.err.log

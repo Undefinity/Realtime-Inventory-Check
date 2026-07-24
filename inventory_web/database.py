@@ -62,11 +62,3 @@ def get_connection() -> pyodbc.Connection:
         return pyodbc.connect(text, timeout=10)
     except pyodbc.Error as error:
         raise DatabaseError(f"数据库连接失败：{error}") from error
-
-
-def check_connection() -> dict[str, str]:
-    with get_connection() as connection:
-        cursor = connection.cursor()
-        cursor.execute("SELECT DB_NAME(), @@SERVERNAME")
-        database, server = cursor.fetchone()
-    return {"name": database, "server": server}

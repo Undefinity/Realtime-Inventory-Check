@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from decimal import Decimal
-from datetime import date, datetime
 from time import perf_counter
 
 import os
@@ -13,18 +11,10 @@ from pathlib import Path
 
 from flask import Flask, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from .database import DatabaseError, check_connection
-from .services import find_item_by_barcode, get_inventory_items, get_near_expiry_items
-from .counting import assign_category, categories, clear_stocktakes, create_category, initialize, save_stocktake, stocktakes
+from .counting import assign_category, categories, clear_stocktakes, create_category, delete_category, initialize, rename_category, save_stocktake, stocktakes
 from .auth import authenticate, create_user, initialize_users, list_users, update_user
-
-
-def _json_safe(value):
-    if isinstance(value, Decimal):
-        return float(value)
-    if isinstance(value, (date, datetime)):
-        return value.isoformat()
-    raise TypeError(f"无法序列化类型：{type(value)!r}")
+from .database import DatabaseError
+from .inventory import inventory_items, search_inventory, sync_inventory
 
 
 def create_app() -> Flask:
@@ -50,6 +40,9 @@ def create_app() -> Flask:
 
     def csrf_valid() -> bool:
         return compare_digest(session.get("csrf_token", ""), request.form.get("csrf_token", ""))
+
+    def category_manager() -> bool:
+        return session.get("role") == "admin" or session.get("username") == "旗舰店"
 
     def admin_required(view):
         @wraps(view)
@@ -80,7 +73,7 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        return render_template("index.html", category_manager=category_manager())
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -129,64 +122,33 @@ def create_app() -> Flask:
             return redirect(url_for("manage_users"))
         return render_template("users.html", users=list_users())
 
-    @app.get("/api/health")
-    def health():
-        try:
-            return jsonify({"ok": True, "database": check_connection()})
-        except DatabaseError as error:
-            app.logger.warning("数据库健康检查失败：%s", error)
-            return jsonify({"ok": False, "message": str(error)}), 503
-
-    @app.get("/api/lookup")
-    def lookup():
-        barcode = request.args.get("barcode", "").strip()
-        branch = request.args.get("branch", "").strip() or None
-        if not barcode:
-            return jsonify({"ok": False, "message": "请输入或扫描商品条码。"}), 400
-        try:
-            result = find_item_by_barcode(barcode, branch)
-            return app.response_class(
-                response=app.json.dumps({"ok": True, **result}, default=_json_safe),
-                status=200,
-                mimetype="application/json",
-            )
-        except DatabaseError as error:
-            app.logger.warning("库存查询失败：%s", error)
-            return jsonify({"ok": False, "message": str(error)}), 503
-
-    @app.get("/api/near-expiry")
-    def near_expiry():
-        branch = request.args.get("branch", "").strip() or None
-        try:
-            days = max(0, min(int(request.args.get("days", 30)), 3650))
-            limit = max(1, min(int(request.args.get("limit", 200)), 1000))
-        except ValueError:
-            return jsonify({"ok": False, "message": "临期天数和条数必须为数字。"}), 400
-        try:
-            rows = get_near_expiry_items(branch, days, limit)
-            return app.response_class(
-                response=app.json.dumps(
-                    {"ok": True, "branch": branch, "days": days, "rows": rows}, default=_json_safe
-                ),
-                status=200,
-                mimetype="application/json",
-            )
-        except DatabaseError as error:
-            app.logger.warning("临期库存查询失败：%s", error)
-            return jsonify({"ok": False, "message": str(error)}), 503
-
     @app.get("/api/inventory")
     def inventory():
-        branch = request.args.get("branch", "").strip() or None
+        rows, total, page, page_size = inventory_items(
+            request.args.get("page", 1, type=int) or 1,
+            request.args.get("page_size", 100, type=int) or 100,
+        )
+        return jsonify({"ok": True, "rows": rows, "total": total, "page": page, "page_size": page_size})
+
+    @app.get("/api/inventory/search")
+    def search_local_inventory():
         try:
-            rows = get_inventory_items(branch)
-            return app.response_class(
-                response=app.json.dumps({"ok": True, "branch": branch, "rows": rows}, default=_json_safe),
-                status=200,
-                mimetype="application/json",
+            rows, total, page, page_size = search_inventory(
+                request.args.get("q", ""),
+                request.args.get("page", 1, type=int) or 1,
+                request.args.get("page_size", 100, type=int) or 100,
             )
-        except DatabaseError as error:
-            app.logger.warning("库存总览查询失败：%s", error)
+            return jsonify({"ok": True, "rows": rows, "total": total, "page": page, "page_size": page_size})
+        except ValueError as error:
+            return jsonify({"ok": False, "message": str(error)}), 400
+
+    @app.post("/api/inventory/sync")
+    def sync_local_inventory():
+        try:
+            count = sync_inventory()
+            return jsonify({"ok": True, "count": count})
+        except (DatabaseError, RuntimeError) as error:
+            app.logger.warning("库存同步失败：%s", error)
             return jsonify({"ok": False, "message": str(error)}), 503
 
     @app.get("/api/categories")
@@ -195,8 +157,30 @@ def create_app() -> Flask:
 
     @app.post("/api/categories")
     def add_category():
+        if not category_manager():
+            return jsonify({"ok": False, "message": "仅旗舰店和管理员可新建分类。"}), 403
         try:
             return jsonify({"ok": True, "category": create_category((request.get_json(silent=True) or {}).get("name", ""))})
+        except ValueError as error:
+            return jsonify({"ok": False, "message": str(error)}), 400
+
+    @app.patch("/api/categories/<int:category_id>")
+    def edit_category(category_id: int):
+        if not category_manager():
+            return jsonify({"ok": False, "message": "仅旗舰店和管理员可修改分类。"}), 403
+        try:
+            rename_category(category_id, (request.get_json(silent=True) or {}).get("name", ""))
+            return jsonify({"ok": True})
+        except ValueError as error:
+            return jsonify({"ok": False, "message": str(error)}), 400
+
+    @app.delete("/api/categories/<int:category_id>")
+    def remove_category(category_id: int):
+        if not category_manager():
+            return jsonify({"ok": False, "message": "仅旗舰店和管理员可删除分类。"}), 403
+        try:
+            delete_category(category_id)
+            return jsonify({"ok": True})
         except ValueError as error:
             return jsonify({"ok": False, "message": str(error)}), 400
 
@@ -212,7 +196,7 @@ def create_app() -> Flask:
     @app.get("/api/stocktakes")
     def get_stocktakes():
         category_id = request.args.get("category_id", type=int)
-        return jsonify({"ok": True, "rows": stocktakes(request.args.get("branch", "").strip() or None, category_id)})
+        return jsonify({"ok": True, "rows": stocktakes(session["username"], category_id)})
 
     @app.post("/api/stocktakes")
     def add_stocktake():
@@ -221,14 +205,14 @@ def create_app() -> Flask:
             quantity = float(payload.get("counted_qty"))
             if quantity < 0:
                 raise ValueError("盘点数量不能小于 0。")
-            return jsonify({"ok": True, **save_stocktake(str(payload.get("item_no", "")).strip(), str(payload.get("item_name", "")).strip(), str(payload.get("branch_no", "")).strip(), quantity)})
+            return jsonify({"ok": True, **save_stocktake(str(payload.get("item_no", "")).strip(), str(payload.get("item_name", "")).strip(), session["username"], quantity)})
         except (TypeError, ValueError) as error:
             return jsonify({"ok": False, "message": str(error) or "请输入有效的盘点数量。"}), 400
 
     @app.post("/api/stocktakes/clear")
     def clear_stocktake():
         try:
-            count = clear_stocktakes((request.get_json(silent=True) or {}).get("branch_no", "").strip())
+            count = clear_stocktakes(session["username"])
             return jsonify({"ok": True, "deleted": count})
         except ValueError as error:
             return jsonify({"ok": False, "message": str(error)}), 400

@@ -18,6 +18,11 @@ def _connection():
 def initialize() -> None:
     with _connection() as conn:
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS "库存" (
+                item_no TEXT PRIMARY KEY NOT NULL,
+                item_name TEXT NOT NULL,
+                unit_no TEXT
+            );
             CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS item_categories (item_no TEXT PRIMARY KEY, category_id INTEGER NOT NULL REFERENCES categories(id));
             CREATE TABLE IF NOT EXISTS stocktakes (
@@ -43,6 +48,27 @@ def create_category(name: str):
         except sqlite3.IntegrityError as error:
             raise ValueError("该分类已存在。") from error
         return {"id": cursor.lastrowid, "name": name}
+
+
+def rename_category(category_id: int, name: str):
+    name = name.strip()
+    if not name:
+        raise ValueError("请输入分类名称。")
+    with _connection() as conn:
+        try:
+            cursor = conn.execute("UPDATE categories SET name = ? WHERE id = ?", (name, category_id))
+        except sqlite3.IntegrityError as error:
+            raise ValueError("该分类已存在。") from error
+        if not cursor.rowcount:
+            raise ValueError("分类不存在。")
+
+
+def delete_category(category_id: int):
+    with _connection() as conn:
+        if not conn.execute("SELECT 1 FROM categories WHERE id = ?", (category_id,)).fetchone():
+            raise ValueError("分类不存在。")
+        conn.execute("DELETE FROM item_categories WHERE category_id = ?", (category_id,))
+        conn.execute("DELETE FROM categories WHERE id = ?", (category_id,))
 
 
 def assign_category(item_no: str, category_id: int | None):
