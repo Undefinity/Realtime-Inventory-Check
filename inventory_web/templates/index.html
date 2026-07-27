@@ -30,7 +30,7 @@
         <div>
           <p class="page-kicker">库存管理</p>
           <h1 id="page-title">商品查询</h1>
-          <p id="page-description">按商品编码或商品名称查询本地库存资料。</p>
+          <p id="page-description">扫描条码，或按商品编码、名称关键词查询本地商品资料。</p>
         </div>
         <div class="today" id="today"></div>
       </header>
@@ -39,16 +39,16 @@
         <div class="search-card">
           <div class="search-heading">
             <span class="heading-icon">⌕</span>
-            <div><h2>查询本地商品</h2><p>输入商品编码或商品名称的任意部分，即可显示全部匹配结果。</p></div>
+            <div><h2>查询本地商品</h2><p>扫码枪可直接输入条码；也支持商品编码、名称的关键词模糊搜索。</p></div>
           </div>
           <form id="inventory-search-form" class="search-form">
-            <label>商品编码或名称
-              <input id="inventory-search-input" name="q" autocomplete="off" placeholder="例如：0000000000001、花生或 Gotchard" autofocus>
+            <label>条码、商品编码或名称
+              <input id="inventory-search-input" name="q" autocomplete="off" placeholder="例如：4108450109855、6540576835 或 小笼包" autofocus>
             </label>
             <button type="submit">查询</button>
           </form>
         </div>
-        <div id="inventory-search-result" class="empty-state"><span>⌕</span><strong>等待查询</strong><p>请输入商品编码或名称后点击“查询”。</p></div>
+        <div id="inventory-search-result" class="empty-state"><span>⌕</span><strong>等待查询</strong><p>请扫描条码，或输入商品编码、名称关键词后点击“查询”。</p></div>
       </section>
 
       <section id="stocktake-panel" class="panel">
@@ -66,6 +66,7 @@
     </main>
   </div>
   <div id="count-modal" class="modal" hidden><div class="modal-card"><button class="modal-close" type="button" aria-label="关闭">×</button><h2>录入盘点数量</h2><p id="count-item-name"></p><label>实际数量<input id="count-quantity" type="number" min="0" step="any" placeholder="请输入实际盘点数量"></label><label>商品分类<select id="count-category"><option value="">未分类</option></select></label><button id="save-count-button" type="button">保存盘点记录</button></div></div>
+  <div id="dialog-modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="dialog-title"><div class="modal-card dialog-card"><h2 id="dialog-title"></h2><p id="dialog-message"></p><label id="dialog-input-wrap" hidden>请输入内容<input id="dialog-input" type="text" maxlength="50"></label><div class="dialog-actions"><button id="dialog-cancel" class="secondary-button" type="button">取消</button><button id="dialog-confirm" type="button">确定</button></div></div></div>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

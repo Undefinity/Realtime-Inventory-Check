@@ -21,7 +21,8 @@ def initialize() -> None:
             CREATE TABLE IF NOT EXISTS "库存" (
                 item_no TEXT PRIMARY KEY NOT NULL,
                 item_name TEXT NOT NULL,
-                unit_no TEXT
+                unit_no TEXT,
+                barcode TEXT
             );
             CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS item_categories (item_no TEXT PRIMARY KEY, category_id INTEGER NOT NULL REFERENCES categories(id));
@@ -31,6 +32,11 @@ def initialize() -> None:
                 PRIMARY KEY (item_no, branch_no)
             );
         """)
+        # 已部署的旧版本没有条码列；以迁移方式保留原有盘点和分类数据。
+        columns = {row["name"] for row in conn.execute('PRAGMA table_info("库存")')}
+        if "barcode" not in columns:
+            conn.execute('ALTER TABLE "库存" ADD COLUMN barcode TEXT')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_inventory_barcode ON "库存"(barcode)')
 
 
 def categories():
